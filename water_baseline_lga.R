@@ -22,6 +22,7 @@ cleaner_data <- function (data_frame, source) {
 	}
 }
 
+
 #### DATA ####
 water_clean <- cleaner_data(water, "Water_Baseline")
 
@@ -46,14 +47,13 @@ mash_some <- function (df, type_vec, constraint_vec, sep="&", fun=nrow) {
 }
 
 table1 <- mash(water_clean, .(lga, water_source_type))
-table2 <- mash_some(water_clean, .(lga, protected),		  
+table2denom <- mash_some(water_clean, .(lga, protected),		  
 	list(protected="protected"))
-table4denom <- mash_some(water_clean, .(lga, water_source_type), 
-	list(water_source_type="borehole_or_tubewell"))
-	
-table4num <- mash_some(water_clean, .(lga, water_source_type, motorized, water_source_physical_state), 
+table2num <- mash_some(water_clean, .(lga, protected, water_source_physical_state),		  
+	list(protected="protected", water_source_physical_state = "poorly_maintained"))	
+table4num <- mash_some(water_clean, .(lga, water_source_type, motorized), 
 	list(water_source_type="borehole_or_tubewell", motorized=c("motorized", "non_motorized")))
-table4num2 <- mash_some(water_clean, .(lga, water_source_type, lift_mechanism, water_source_physical_state), 
+table4num2 <- mash_some(water_clean, .(lga, water_source_type, lift_mechanism), 
 	list(water_source_type="borehole_or_tubewell", lift_mechanism=c("solar","diesel","electric")))
 	
 table5num <- mash_some(water_clean, .(lga, water_source_type, motorized, water_source_physical_state), 
@@ -61,7 +61,7 @@ table5num <- mash_some(water_clean, .(lga, water_source_type, motorized, water_s
 table5num2 <- mash_some(water_clean, .(lga, water_source_type, lift_mechanism, water_source_physical_state), 
 	list(water_source_type="borehole_or_tubewell", lift_mechanism=c("solar","diesel","electric"), water_source_physical_state="poorly_maintained"))
 
-res <- rbind(table1, table2, table4denom, table4num, table4num2, table5num, table5num2)
+res <- rbind(table1, table2denom, table2num, table4num, table4num2, table5num, table5num2)
 (res)
 {}
 
@@ -117,3 +117,15 @@ just_numbers <- function(data_frame, type, srcval, tgtval, withall=TRUE) {
  	 
  table <- rbind(table1, table2, table3, table41, table42, table51, table52)
  write.csv(table, "~/Desktop/output.csv")
+
+
+########### MAIN #######################
+# should be able to take a command that looks like:
+# process(sources=list(c(type="Water_Baseline", file="~/Code/nmis/nmis/dropbox/facility_csvs/Water_Baseline_PhaseII_all_merged_cleaned_09_19_2011.csv"),
+#		             c(type="Water_Pilot", file="~/Code/nmis/nmis/dropbox/facility_csvs/Water_Baseline_PhaseII_all_merged_cleaned_09_19_2011.csv")),
+#		indicators=list(),
+#		lgas=list()
+#	    )
+
+
+
