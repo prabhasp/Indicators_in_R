@@ -22,17 +22,44 @@ cleaner_data <- function (data_frame, source) {
 	}
 }
 
+#### DATA ####
+water_clean <- cleaner_data(water, "Water_Baseline")
+
 ####### METHOD0 #####
-
-
-combo1 <- ddply(water_clean, .(lga, water_source_type, lift_mechanism, water_source_physical_state), nrow)
-combo3 <- ddply(water_clean, .(lga, water_source_type, motorized,      water_source_physical_state), nrow)
-combo2 <- ddply(water_clean, .(lga, protected,         lift_mechanism, water_source_physical_state), nrow)
-combo4 <- ddply(water_clean, .(lga, protected,         motorized,      water_source_physical_state), nrow)
-names(combo1) <- c("lga", "type", "mech", "state")
-names(combo2) <- c("lga", "type", "mech", "state")
-names(combo3) <- c("lga", "type", "mech", "state")
-names(combo4) <- c("lga", "type", "mech", "state")
+mash <- function (df, type_vec, sep="&", fun=nrow) {
+	res <- ddply(df, type_vec, fun, .drop=FALSE)
+	# now, we combine all of the result factors into one factor; not including the lga factor for obvious reasons
+	working_type_vec <- type_vec[names(type_vec)!="lga"]
+	combined_column <- function () with(res, do.call(paste, c(working_type_vec, sep=sep)))
+	summarize(res, lga = lga, indicator=as.factor(combined_column()), value = V1)
+}
+# this one subsets each type by the values specified in which_vec
+# ie, mash_some(df, lift_mechanism, "solar") will only mash solar values
+# mash_some(df, lift_mechanims, "all") won't do any subsetting; will mash all values
+mash_some <- function (df, type_vec, constraint_vec, sep="&", fun=nrow) {
+	for(in in 1:length(constraint_vec)) {
+		df <- subset(df, df$names(constraint_vec[[i]]) %in% constraint_vec[[i]])
+	}
+	df
+}
+`
+mash(water_clean, .(lga, water_source_type))
+mash_some(water_clean, .(lga, protected, water_source_physical_state), (protected="protected", water_source_physical_state="poorly_maintained"))
+mash_some(water_clean, .(lga, protected), ("all", "protected"))
+mash_some(water_clean, .(lga, water_source_type), ("all", "borehole_or_tubewell")
+mash_some(water_clean, .(lga, water_source_type, motorized, water_source_physical_state), ("all", "borehole_or_tubewell", "all"))
+mash_some(water_clean, .(lga, water_source_type, lift_mechanism, water_source_physical_state), ("all", "borehole_or_tubewell", c("solar","diesel","electric")))
+mash_some(water_clean, .(lga, water_source_type, motorized, water_source_physical_state), ("all", "borehole_or_tubewell", "all", "poorly_maintained"))
+mash_some(water_clean, .(lga, water_source_type, lift_mechanism, water_source_physical_state), ("all", "borehole_or_tubewell", c("solar","diesel","electric"), "poorly_maintained"))
+`
+combo1 <- mash(water_clean, .(lga, water_source_type, lift_mechanism, water_source_physical_state))
+combo3 <- mash(water_clean, .(lga, water_source_type, motorized,      water_source_physical_state))
+combo2 <- mash(water_clean, .(lga, protected,         lift_mechanism, water_source_physical_state))
+combo4 <- mash(water_clean, .(lga, protected,         motorized,      water_source_physical_state))
+combo5 <- mash(water_clean, .(lga, water_source_type, lift_mechanism))
+combo1 <- mash(water_clean, .(lga, water_source_type, motorized))
+combo5 <- mash(water_clean, .(lga, water_source_type, lift_mechanism))
+combo1 <- mash(water_clean, .(lga, water_source_type, motorized))
 res <- rbind(combo1, combo2, combo3, combo4)
 
 
