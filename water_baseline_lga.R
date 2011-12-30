@@ -22,11 +22,13 @@ cleaner_data <- function (data_frame, source) {
 	}
 }
 
-
-#### DATA ####
-water_clean <- cleaner_data(water, "Water_Baseline")
-
 ####### METHOD0 #####
+# mash will take:
+#   a dataframe (like the whole water data-set, perhaps a column subset)
+#   a vector of types (like .(lga, water_source_type, lift_mechanims), etc) to pass to ddply
+#   a separator to name indicators by
+#   an aggregation function (the default, nrow, just counts the number per type)
+# and return a data frame, which has an LGA, column, and an indicator column (ex. borehole&solar) with an aggregated value
 mash <- function (df, type_vec, sep="&", fun=nrow) {
 	res <- ddply(df, type_vec, fun, .drop=FALSE)
 	# now, we combine all of the result factors into one factor; not including the lga factor for obvious reasons
@@ -34,18 +36,27 @@ mash <- function (df, type_vec, sep="&", fun=nrow) {
 	combined_column <- function () with(res, do.call(paste, c(working_type_vec, sep=sep)))
 	summarize(res, lga = lga, indicator=as.factor(combined_column()), value = V1)
 }
-# this one subsets each type by the values specified in which_vec
-# ie, mash_some(df, lift_mechanism, "solar") will only mash solar values
+# mash_some will take:
+#   a dataframe (like the whole water data-set, perhaps a column subset)
+#   a vector of types (like .(lga, water_source_type, lift_mechanism), etc) to pass to ddply
+#   a list of constraints (like list(lift_mechanism=c("solar", "diesel"))) which to subset by
+#   a separator to name indicators by
+#   an aggregation function (the default, nrow, just counts the number per type)
+# and return the result of mash, but only for the set of data which have types specified by constrain_vec
+# ie, mash_some(df, lift_mechanism, list(lift_mechanism="solar")) will only mash solar values
 # mash_some(df, lift_mechanims, "all") won't do any subsetting; will mash all values
-mash_some <- function (df, type_vec, constraint_vec, sep="&", fun=nrow) {
-	for(i in 1:length(constraint_vec)) {
-		colname <- names(constraint_vec)[[i]]
-		df <- subset (df, df[[colname]] %in% constraint_vec[[i]])
+mash_some <- function (df, type_vec, constraint_dict, sep="&", fun=nrow) {
+	for(i in 1:length(constraint_dict)) {
+		colname <- names(constraint_dict)[[i]]
+		df <- subset (df, df[[colname]] %in% constraint_dict[[i]])
 		df[[colname]] <- factor(as.character(df[[colname]]))
 	}
 	mash(df, type_vec, sep=sep, fun=fun)
 }
 
+
+#### MAIN ####
+water_clean <- cleaner_data(water, "Water_Baseline")
 table1 <- mash(water_clean, .(lga, water_source_type))
 table2denom <- mash_some(water_clean, .(lga, protected),		  
 	list(protected="protected"))
@@ -63,61 +74,6 @@ table5num2 <- mash_some(water_clean, .(lga, water_source_type, lift_mechanism, w
 
 res <- rbind(table1, table2denom, table2num, table4num, table4num2, table5num, table5num2)
 (res)
-{}
-
-
-####### METHOD1 #####
-####### The aggregation functions #####
-numbers <- function(data_frame, type, withall=TRUE) { 
-	f <- ddply(data_frame, c("lga", type), nrow, .drop=FALSE)
-	if (withall) cast(melt(f), margins=TRUE, fun=sum)[0:2+length(type)]
-	else f 
-}
-just_numbers <- function(data_frame, type, srcval, tgtval, withall=TRUE) {
-	res <- numbers(data_frame, type, withall=withall)
-	res[[type]] <- factor(recodeVar(as.character(res[[type]]), src=srcval, tgt=tgtval, default=NA))
-	res
-}
-# tables
-(table1 <- just_numbers(subset(water_clean, 
-		subset=TRUE),
-    "water_source_type",
-	 srcval=c('borehole_or_tubewell', 'developed_and_treated_spring_and_surface_water','protected_dug_well','other_protected','other_unprotected', '(all)'),
- 	 tgtval=c('W.BT.*.*.N', 'W.SS.*.*.N', 'W.PD.*.*.N', 'W.OP.*.*.N',  'W.OU.*.*.N', 'W.*.*.*.N')))
-(table2 <- just_numbers(subset(water_clean, 
-	     subset=(water_clean$protected=='protected')), 
-     "water_source_physical_state",
-	 srcval=c('poorly_maintained', '(all)','well_maintained'),
- 	 tgtval=c('W.PR.*.PO.N', 'W.*.*.PO.N', NA)))
-# table3 no can do right now
-(table41 <- just_numbers(subset(water_clean, 
-	    subset=(water_clean$water_source_type=='borehole_or_tubewell')),
-    "motorized",
-     withall=FALSE,
-	 srcval=c('motorized','non_motorized'),
- 	 tgtval=c('W.BT.MOT.*.N', 'W.BT.MAN.*.N')))
-(table42 <- just_numbers(subset(water_clean, 
-	    subset=(water_clean$water_source_type=='borehole_or_tubewell')),
-    "lift_mechanism",
-     withall=FALSE,
-	 srcval=c('solar','diesel', 'electric'),
- 	 tgtval=c('W.BT.SOL.*.N', 'W.BT.DIE.*.N', 'W.BT.ELE.*.N')))
-(table51 <- just_numbers(subset(water_clean, 
-	    subset=(water_clean$water_source_type=='borehole_or_tubewell' & water_source_physical_state=='poorly_maintained')),
-    "motorized",
-     withall=FALSE,
-	 srcval=c('motorized','non_motorized'),
- 	 tgtval=c('W.BT.MOT.PO.N', 'W.BT.MAN.PO.N')))
-(table52 <- just_numbers(subset(water_clean, 
-		subset=(water_clean$water_source_type=='borehole_or_tubewell' & water_source_physical_state=='poorly_maintained')),
-    "lift_mechanism",
-     withall=FALSE,
-	 srcval=c('solar','diesel', 'electric'),
- 	 tgtval=c('W.BT.SOL.PO.N', 'W.BT.DIE.PO.N', 'W.BT.ELE.PO.N')))
- 	 
- table <- rbind(table1, table2, table3, table41, table42, table51, table52)
- write.csv(table, "~/Desktop/output.csv")
-
 
 ########### MAIN #######################
 # should be able to take a command that looks like:
