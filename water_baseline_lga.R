@@ -59,6 +59,7 @@ mash_some <- function (df, type_vec, constraint_dict, sep="&", fun=nrow) {
 		df <- subset (df, df[[colname]] %in% constraint_dict[[i]])
 		df[[colname]] <- factor(as.character(df[[colname]]))
 	}
+	# TODO: there is a problem when this subsetting process produces an empty result... what do we do?
 	mash(df, type_vec=type_vec, sep=sep, fun=fun)
 }
 
@@ -113,12 +114,12 @@ process_one_src <- function(source, indicators, lgas='all') {
 	for(i in 1:length(indicatordicts)) {
 		indicatordict <- indicatordicts[[i]]
 # TODO: fix lga filtration (work left in mash_some, i think). only the all lga case is working now. 
-#		if(lgas=='all') {	
+		if(lgas=='all') {	
 				this_res <- mash_some(clean_src, c("lga", names(indicatordict)), indicatordict)
-#		} else {
-#			indicatordict["lga"] <- lgas 
-#			this_res <- mash_some(clean_src, c(names(indicatordict)), indicatordict)
-#		}
+		} else {
+			indicatordict<- c(lga=lgas, indicatordict)
+			this_res <- mash_some(clean_src, names(indicatordict), indicatordict)
+		}
 		
 		res_df <- rbind(res_df, this_res)		
 	}
@@ -143,3 +144,6 @@ process <- function(sources, indicators, lgas) {
 res2 <- process_one_src(c(type="Water_Baseline", file="~/Code/nmis/nmis/dropbox/facility_csvs/Water_Baseline_PhaseII_all_merged_cleaned_09_19_2011.csv"),
 		  list("borehole_or_tubewell", "developed_and_treated_spring_and_surface_water", "other_protected", "other_unprotected", "protected_dug_well", "protected", "protected&poorly_maintained", "borehole_or_tubewell&motorized", "borehole_or_tubewell&non_motorized", "borehole_or_tubewell&diesel", "borehole_or_tubewell&electric", "borehole_or_tubewell&solar", "borehole_or_tubewell&motorized&poorly_maintained", "borehole_or_tubewell&non_motorized&poorly_maintained", "borehole_or_tubewell&diesel&poorly_maintained", "borehole_or_tubewell&electric&poorly_maintained", "borehole_or_tubewell&solar&poorly_maintained"))
 print(head(res2))
+res3 <- process_one_src(c(type="Water_Baseline", file="~/Code/nmis/nmis/dropbox/facility_csvs/Water_Baseline_PhaseII_all_merged_cleaned_09_19_2011.csv"),
+		  list("borehole_or_tubewell", "developed_and_treated_spring_and_surface_water", "other_protected", "other_unprotected", "protected_dug_well", "protected", "protected&poorly_maintained", "borehole_or_tubewell&motorized", "borehole_or_tubewell&non_motorized", "borehole_or_tubewell&diesel", "borehole_or_tubewell&electric", "borehole_or_tubewell&solar", "borehole_or_tubewell&motorized&poorly_maintained", "borehole_or_tubewell&non_motorized&poorly_maintained", "borehole_or_tubewell&diesel&poorly_maintained", "borehole_or_tubewell&electric&poorly_maintained", "borehole_or_tubewell&solar&poorly_maintained"), lgas=list("ABAJI"))
+print(res3)
