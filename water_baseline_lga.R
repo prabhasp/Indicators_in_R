@@ -1,12 +1,15 @@
 # Using these libraries down below
-water <- read.csv("~/Code/nmis/nmis/dropbox/facility_csvs/Water_Baseline_PhaseII_all_merged_cleaned_09_19_2011.csv")
+#water <- read.csv("~/Code/nmis/nmis/dropbox/facility_csvs/Water_Baseline_PhaseII_all_merged_cleaned_09_19_2011.csv")
 library('plyr')
 library('doBy')
 library('reshape')
+library('R.oo')
 
 ###### DATA CLEANING / NEW COLUMNS ########
-cleaner_data <- function (data_frame, source) {
-	if (source=="Water_Baseline") {
+
+# cleaner_data takes data and a source indicator (such as Water_Baseline), does some basic re-coding, and produces some extra variables that we need (such as a new "motorized" factor)
+cleaner_data <- function (data_frame, source_type) {
+	if (source_type=="Water_Baseline") {
 		data_frame <- data_frame[,c('lga','water_source_type', 'water_source_physical_state', 'lift_mechanism')]
 
 		# merge 'newly_constructed' and 'well_maintained'
@@ -19,6 +22,8 @@ cleaner_data <- function (data_frame, source) {
  	    # note: missing do_not_know; will be mapped to 
 		fmotorized <- function(df) factor(recodeVar(as.character(df$lift_mechanism), src=c('diesel','solar','electric','other_powered','other_powered','animal','hand_pump','rope_pulley','other_nonpowered','do_not_know'), tgt=c('motorized','motorized','motorized','motorized','non_motorized','non_motorized','non_motorized','non_motorized','non_motorized','N/A')))
 		cbind(data_frame, protected = fprotected(data_frame), motorized = fmotorized(data_frame))
+	} else {
+		throw('Source_type ', source_type, ' not supported yet.')
 	}
 }
 
@@ -32,10 +37,13 @@ cleaner_data <- function (data_frame, source) {
 mash <- function (df, type_vec, sep="&", fun=nrow) {
 	res <- ddply(df, type_vec, fun, .drop=FALSE)
 	# now, we combine all of the result factors into one factor; not including the lga factor for obvious reasons
-	working_type_vec <- type_vec[names(type_vec)!="lga"]
+	# note: some syntactic hacking is required to support both .(lga, water_source_type) and c("lga", "water_source_type") arguments
+	if(class(type_vec) == "quoted") working_type_vec <- type_vec[names(type_vec)!="lga"]
+	else if (class(type_vec) == "character")	working_type_vec <- as.quoted(type_vec[type_vec!="lga"])
 	combined_column <- function () with(res, do.call(paste, c(working_type_vec, sep=sep)))
 	summarize(res, lga = lga, indicator=as.factor(combined_column()), value = V1)
 }
+
 # mash_some will take:
 #   a dataframe (like the whole water data-set, perhaps a column subset)
 #   a vector of types (like .(lga, water_source_type, lift_mechanism), etc) to pass to ddply
@@ -51,7 +59,7 @@ mash_some <- function (df, type_vec, constraint_dict, sep="&", fun=nrow) {
 		df <- subset (df, df[[colname]] %in% constraint_dict[[i]])
 		df[[colname]] <- factor(as.character(df[[colname]]))
 	}
-	mash(df, type_vec, sep=sep, fun=fun)
+	mash(df, type_vec=type_vec, sep=sep, fun=fun)
 }
 
 
@@ -73,15 +81,66 @@ table5num2 <- mash_some(water_clean, .(lga, water_source_type, lift_mechanism, w
 	list(water_source_type="borehole_or_tubewell", lift_mechanism=c("solar","diesel","electric"), water_source_physical_state="poorly_maintained"))
 
 res <- rbind(table1, table2denom, table2num, table4num, table4num2, table5num, table5num2)
-(res)
+print(head(res))
+
+########### UTILS ######################
+# indicators_to_indicatordict("borehole_or_tubewell&protected", df) should produce list(water_source_type="borehole_or_tube_well", protected="protected")
+# the df is used to get the factor levels, really.
+# sep is the separator among the various types.
+indicator_to_indicatordict <- function(indicator, df, sep='&') {
+	res <- list()
+	subindic_levels <- sapply(names(df), function (x) levels(as.factor(df[[x]])), simplify=FALSE)
+	subindic_vals <- strsplit(indicator, sep)[[1]]
+	for(i in 1:length(subindic_vals)) {
+		this <- subindic_vals[[i]]
+		which_level <- sapply(subindic_levels, function(level) this %in% level)
+		if (sum(which_level) != 1) {throw(this, " not in data, or matches more than one column.")}
+		res[names(which_level[which_level==TRUE])[1]] <- this # res
+	}
+	res
+}
+indicators_to_indicatordicts <- function(indicators, df, sep='&') {
+	res <- lapply(indicators, function(x) indicator_to_indicatordict(x, df, sep=sep))
+	names(res) <- indicators
+	res
+}
+process_one_src <- function(source, indicators, lgas='all') {
+	#TODO: refactor into an apply function
+	res_df <- data.frame()
+
+	clean_src <- cleaner_data(read.csv(source[["file"]]), source[["type"]])
+	indicatordicts <- indicators_to_indicatordicts(indicators, clean_src)
+	for(i in 1:length(indicatordicts)) {
+		indicatordict <- indicatordicts[[i]]
+# TODO: fix lga filtration (work left in mash_some, i think). only the all lga case is working now. 
+#		if(lgas=='all') {	
+				this_res <- mash_some(clean_src, c("lga", names(indicatordict)), indicatordict)
+#		} else {
+#			indicatordict["lga"] <- lgas 
+#			this_res <- mash_some(clean_src, c(names(indicatordict)), indicatordict)
+#		}
+		
+		res_df <- rbind(res_df, this_res)		
+	}
+	res_df
+}
+process <- function(sources, indicators, lgas) {
+	#TODO: refactor into an apply function
+	res_df <- data.frame()
+	for(i in 1:length(sources)) {
+		source <- sources[[i]]
+
+		this_res <- process_one_src(source, indicators, lgas)
+
+		res_df <- rbind(res_df, this_res)
+	}
+	res_df
+}
+
 
 ########### MAIN #######################
 # should be able to take a command that looks like:
-# process(sources=list(c(type="Water_Baseline", file="~/Code/nmis/nmis/dropbox/facility_csvs/Water_Baseline_PhaseII_all_merged_cleaned_09_19_2011.csv"),
-#		             c(type="Water_Pilot", file="~/Code/nmis/nmis/dropbox/facility_csvs/Water_Baseline_PhaseII_all_merged_cleaned_09_19_2011.csv")),
-#		indicators=list(),
-#		lgas=list()
-#	    )
-
-
-
+process_one_src(c(type="Water_Baseline", file="~/Code/nmis/nmis/dropbox/facility_csvs/Water_Baseline_PhaseII_all_merged_cleaned_09_19_2011.csv"),
+		  list("borehole_or_tubewell", "developed_and_treated_spring_and_surface_water", "other_protected", "other_unprotected", "protected_dug_well", "protected", "protected&poorly_maintained", "borehole_or_tubewell&motorized", "borehole_or_tubewell&non_motorized", "borehole_or_tubewell&diesel", "borehole_or_tubewell&electric", "borehole_or_tubewell&solar", "borehole_or_tubewell&motorized&poorly_maintained", "borehole_or_tubewell&non_motorized&poorly_maintained", "borehole_or_tubewell&diesel&poorly_maintained", "borehole_or_tubewell&electric&poorly_maintained", "borehole_or_tubewell&solar&poorly_maintained"))
+	    
+	    
