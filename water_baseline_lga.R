@@ -140,7 +140,6 @@ process <- function(sources, indicators, lgas) {
 
 ########### MAIN #######################
 # should be able to take a command that looks like:
-process_one_src(c(type="Water_Baseline", file="~/Code/nmis/nmis/dropbox/facility_csvs/Water_Baseline_PhaseII_all_merged_cleaned_09_19_2011.csv"),
+res2 <- process_one_src(c(type="Water_Baseline", file="~/Code/nmis/nmis/dropbox/facility_csvs/Water_Baseline_PhaseII_all_merged_cleaned_09_19_2011.csv"),
 		  list("borehole_or_tubewell", "developed_and_treated_spring_and_surface_water", "other_protected", "other_unprotected", "protected_dug_well", "protected", "protected&poorly_maintained", "borehole_or_tubewell&motorized", "borehole_or_tubewell&non_motorized", "borehole_or_tubewell&diesel", "borehole_or_tubewell&electric", "borehole_or_tubewell&solar", "borehole_or_tubewell&motorized&poorly_maintained", "borehole_or_tubewell&non_motorized&poorly_maintained", "borehole_or_tubewell&diesel&poorly_maintained", "borehole_or_tubewell&electric&poorly_maintained", "borehole_or_tubewell&solar&poorly_maintained"))
-	    
-	    
+print(head(res2))
