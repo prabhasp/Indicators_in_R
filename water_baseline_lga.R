@@ -28,14 +28,37 @@ cleaner_data <- function (data_frame, source_type) {
 }
 
 ####### METHOD0 #####
-# mash will take:
+subset_by_constraint_dict <- function(df, constraint_dict) {
+	for(i in 1:length(constraint_dict)) {
+		colname <- names(constraint_dict)[[i]]
+		old_levels <- levels(df[[colname]])
+		df <- subset (df, df[[colname]] %in% constraint_dict[[i]])
+		df[[colname]] <- factor(as.character(df[[colname]]), levels=constraint_dict[[i]])
+	}
+	df
+}
+
+# mash_some will take:
 #   a dataframe (like the whole water data-set, perhaps a column subset)
-#   a vector of types (like .(lga, water_source_type, lift_mechanims), etc) to pass to ddply
+#   a vector of types (like .(lga, water_source_type, lift_mechanism), etc) to pass to ddply
+#      (TODO: take out type_vec, and just constrain it to names(constraint_dict) ?)
+#   a list of constraints (like list(lift_mechanism=c("solar", "diesel"))) which to subset by
 #   a separator to name indicators by
 #   an aggregation function (the default, nrow, just counts the number per type)
-# and return a data frame, which has an LGA, column, and an indicator column (ex. borehole&solar) with an aggregated value
-mash <- function (df, type_vec, sep="&", fun=nrow) {
-	res <- ddply(df, type_vec, fun, .drop=FALSE)
+# and return the result of mash, but only for the set of data which have types specified by constrain_vec
+# ie, mash_some(df, lift_mechanism, list(lift_mechanism="solar")) will only mash solar values
+# mash_some(df, lift_mechanims, "all") won't do any subsetting; will mash all values
+mash_some <- function (df, type_vec, constraint_dict=list(), sep="&", fun=nrow) {
+	df2 <- subset_by_constraint_dict(df, constraint_dict)
+	if (nrow(df2) == 0) {
+		#HACK: assign a random row to df, so that we get expected results from df still; see 
+		# reason: https://groups.google.com/forum/#!searchin/manipulatr/ddply$20empty$20data$20frame/manipulatr/dboVcECswoE/vyvRTWUebcYJ
+		# it works because this will be taken out down below in the subset_by_constraint line
+		df2 <- df[1,] 
+	}
+	res <- ddply(df2, type_vec, fun, .drop=FALSE)
+	res <- subset_by_constraint_dict(res, constraint_dict)
+	
 	# now, we combine all of the result factors into one factor; not including the lga factor for obvious reasons
 	# note: some syntactic hacking is required to support both .(lga, water_source_type) and c("lga", "water_source_type") arguments
 	if(class(type_vec) == "quoted") working_type_vec <- type_vec[names(type_vec)!="lga"]
@@ -44,45 +67,8 @@ mash <- function (df, type_vec, sep="&", fun=nrow) {
 	summarize(res, lga = lga, indicator=as.factor(combined_column()), value = V1)
 }
 
-# mash_some will take:
-#   a dataframe (like the whole water data-set, perhaps a column subset)
-#   a vector of types (like .(lga, water_source_type, lift_mechanism), etc) to pass to ddply
-#   a list of constraints (like list(lift_mechanism=c("solar", "diesel"))) which to subset by
-#   a separator to name indicators by
-#   an aggregation function (the default, nrow, just counts the number per type)
-# and return the result of mash, but only for the set of data which have types specified by constrain_vec
-# ie, mash_some(df, lift_mechanism, list(lift_mechanism="solar")) will only mash solar values
-# mash_some(df, lift_mechanims, "all") won't do any subsetting; will mash all values
-mash_some <- function (df, type_vec, constraint_dict, sep="&", fun=nrow) {
-	for(i in 1:length(constraint_dict)) {
-		colname <- names(constraint_dict)[[i]]
-		df <- subset (df, df[[colname]] %in% constraint_dict[[i]])
-		df[[colname]] <- factor(as.character(df[[colname]]))
-	}
-	# TODO: there is a problem when this subsetting process produces an empty result... what do we do?
-	mash(df, type_vec=type_vec, sep=sep, fun=fun)
-}
-
 
 #### MAIN ####
-water_clean <- cleaner_data(water, "Water_Baseline")
-table1 <- mash(water_clean, .(lga, water_source_type))
-table2denom <- mash_some(water_clean, .(lga, protected),		  
-	list(protected="protected"))
-table2num <- mash_some(water_clean, .(lga, protected, water_source_physical_state),		  
-	list(protected="protected", water_source_physical_state = "poorly_maintained"))	
-table4num <- mash_some(water_clean, .(lga, water_source_type, motorized), 
-	list(water_source_type="borehole_or_tubewell", motorized=c("motorized", "non_motorized")))
-table4num2 <- mash_some(water_clean, .(lga, water_source_type, lift_mechanism), 
-	list(water_source_type="borehole_or_tubewell", lift_mechanism=c("solar","diesel","electric")))
-	
-table5num <- mash_some(water_clean, .(lga, water_source_type, motorized, water_source_physical_state), 
-	list(water_source_type="borehole_or_tubewell", motorized=c("motorized", "non_motorized"), water_source_physical_state="poorly_maintained"))
-table5num2 <- mash_some(water_clean, .(lga, water_source_type, lift_mechanism, water_source_physical_state), 
-	list(water_source_type="borehole_or_tubewell", lift_mechanism=c("solar","diesel","electric"), water_source_physical_state="poorly_maintained"))
-
-res <- rbind(table1, table2denom, table2num, table4num, table4num2, table5num, table5num2)
-print(head(res))
 
 ########### UTILS ######################
 # indicators_to_indicatordict("borehole_or_tubewell&protected", df) should produce list(water_source_type="borehole_or_tube_well", protected="protected")
