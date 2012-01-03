@@ -1,4 +1,5 @@
 # Using these libraries down below
+#water <- read.csv("~/Code/nmis/nmis/dropbox/facility_csvs/Water_Baseline_PhaseII_all_merged_cleaned_09_19_2011.csv")
 library('plyr')
 library('doBy')
 library('reshape')
@@ -27,15 +28,6 @@ cleaner_data <- function (data_frame, source_type) {
 }
 
 ####### METHOD0 #####
-debug <- function(x) {
-	print(str(x))
-	print(x)
-}
-# take a list of types, combine them into one name separated by a "sep", and excluding a given value
-combine_name <- function (type_vec, exclude_val ="lga", sep='&') {
-	as.factor(paste(type_vec[type_vec != exclude_val], collapse=sep))
-}
-
 # mash will take:
 #   a dataframe (like the whole water data-set, perhaps a column subset)
 #   a vector of types (like .(lga, water_source_type, lift_mechanims), etc) to pass to ddply
@@ -43,13 +35,13 @@ combine_name <- function (type_vec, exclude_val ="lga", sep='&') {
 #   an aggregation function (the default, nrow, just counts the number per type)
 # and return a data frame, which has an LGA, column, and an indicator column (ex. borehole&solar) with an aggregated value
 mash <- function (df, type_vec, sep="&", fun=nrow) {
-	# to support both .(column_name1, column_name2) and c("colname1", "colname2") syntax, convert type 1 to type 2
-	if(class(type_vec) == "quoted") type_vec <- names(type_vec)
-
 	res <- ddply(df, type_vec, fun, .drop=FALSE)
 	# now, we combine all of the result factors into one factor; not including the lga factor for obvious reasons
-	summarize(res, lga = lga, indicator=combine_name(type_vec, "lga"), value = V1)
-	
+	# note: some syntactic hacking is required to support both .(lga, water_source_type) and c("lga", "water_source_type") arguments
+	if(class(type_vec) == "quoted") working_type_vec <- type_vec[names(type_vec)!="lga"]
+	else if (class(type_vec) == "character")	working_type_vec <- as.quoted(type_vec[type_vec!="lga"])
+	combined_column <- function () with(res, do.call(paste, c(working_type_vec, sep=sep)))
+	summarize(res, lga = lga, indicator=as.factor(combined_column()), value = V1)
 }
 
 # mash_some will take:
@@ -73,8 +65,6 @@ mash_some <- function (df, type_vec, constraint_dict, sep="&", fun=nrow) {
 
 
 #### MAIN ####
-
-water <- read.csv("~/Code/nmis/nmis/dropbox/facility_csvs/Water_Baseline_PhaseII_all_merged_cleaned_09_19_2011.csv")
 water_clean <- cleaner_data(water, "Water_Baseline")
 table1 <- mash(water_clean, .(lga, water_source_type))
 table2denom <- mash_some(water_clean, .(lga, protected),		  
@@ -92,7 +82,6 @@ table5num2 <- mash_some(water_clean, .(lga, water_source_type, lift_mechanism, w
 	list(water_source_type="borehole_or_tubewell", lift_mechanism=c("solar","diesel","electric"), water_source_physical_state="poorly_maintained"))
 
 res <- rbind(table1, table2denom, table2num, table4num, table4num2, table5num, table5num2)
-print("\n Results of method 1: \n")
 print(head(res))
 
 ########### UTILS ######################
@@ -154,9 +143,7 @@ process <- function(sources, indicators, lgas) {
 # should be able to take a command that looks like:
 res2 <- process_one_src(c(type="Water_Baseline", file="~/Code/nmis/nmis/dropbox/facility_csvs/Water_Baseline_PhaseII_all_merged_cleaned_09_19_2011.csv"),
 		  list("borehole_or_tubewell", "developed_and_treated_spring_and_surface_water", "other_protected", "other_unprotected", "protected_dug_well", "protected", "protected&poorly_maintained", "borehole_or_tubewell&motorized", "borehole_or_tubewell&non_motorized", "borehole_or_tubewell&diesel", "borehole_or_tubewell&electric", "borehole_or_tubewell&solar", "borehole_or_tubewell&motorized&poorly_maintained", "borehole_or_tubewell&non_motorized&poorly_maintained", "borehole_or_tubewell&diesel&poorly_maintained", "borehole_or_tubewell&electric&poorly_maintained", "borehole_or_tubewell&solar&poorly_maintained"))
-print("\n Results of method 2: \n")
 print(head(res2))
 res3 <- process_one_src(c(type="Water_Baseline", file="~/Code/nmis/nmis/dropbox/facility_csvs/Water_Baseline_PhaseII_all_merged_cleaned_09_19_2011.csv"),
 		  list("borehole_or_tubewell", "developed_and_treated_spring_and_surface_water", "other_protected", "other_unprotected", "protected_dug_well", "protected", "protected&poorly_maintained", "borehole_or_tubewell&motorized", "borehole_or_tubewell&non_motorized", "borehole_or_tubewell&diesel", "borehole_or_tubewell&electric", "borehole_or_tubewell&solar", "borehole_or_tubewell&motorized&poorly_maintained", "borehole_or_tubewell&non_motorized&poorly_maintained", "borehole_or_tubewell&diesel&poorly_maintained", "borehole_or_tubewell&electric&poorly_maintained", "borehole_or_tubewell&solar&poorly_maintained"), lgas=list("ABAJI"))
-print("\n Results of method 3: \n")
 print(res3)
