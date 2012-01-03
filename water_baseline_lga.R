@@ -56,7 +56,7 @@ mash_some <- function (df, type_vec, constraint_dict=list(), sep="&", fun=nrow) 
 		# it works because this will be taken out down below in the subset_by_constraint line
 		df2 <- df[1,] 
 	}
-	res <- ddply(df2, type_vec, fun, .drop=FALSE)
+	res <- ddply(df2, type_vec, fun, .drop=FALSE) 
 	res <- subset_by_constraint_dict(res, constraint_dict)
 	
 	# now, we combine all of the result factors into one factor; not including the lga factor for obvious reasons
@@ -86,50 +86,44 @@ indicator_to_indicatordict <- function(indicator, df, sep='&') {
 	}
 	res
 }
+# same as above, but takes and returns a list of indicators / indicatordicts
 indicators_to_indicatordicts <- function(indicators, df, sep='&') {
 	res <- lapply(indicators, function(x) indicator_to_indicatordict(x, df, sep=sep))
 	names(res) <- indicators
 	res
 }
-process_one_src <- function(source, indicators, lgas='all') {
-	#TODO: refactor into an apply function
-	res_df <- data.frame()
-
+process_one_src <- function(source, indicators, lgas=list('all')) {
 	clean_src <- cleaner_data(read.csv(source[["file"]]), source[["type"]])
 	indicatordicts <- indicators_to_indicatordicts(indicators, clean_src)
-	for(i in 1:length(indicatordicts)) {
-		indicatordict <- indicatordicts[[i]]
-# TODO: fix lga filtration (work left in mash_some, i think). only the all lga case is working now. 
-		if(lgas=='all') {	
-				this_res <- mash_some(clean_src, c("lga", names(indicatordict)), indicatordict)
+
+	# for each indicatordict in indicatordicts, produce a data frame, and rbind them all together
+	do.call(rbind, llply(indicatordicts, function(indicatordict) {
+		if (length(lgas)==1 & lgas[[1]]=='all') {	
+			mash_some(clean_src, c("lga", names(indicatordict)), indicatordict)
 		} else {
 			indicatordict<- c(lga=lgas, indicatordict)
-			this_res <- mash_some(clean_src, names(indicatordict), indicatordict)
+			mash_some(clean_src, names(indicatordict), indicatordict)
 		}
-		
-		res_df <- rbind(res_df, this_res)		
-	}
-	res_df
+	}))
 }
 process <- function(sources, indicators, lgas) {
-	#TODO: refactor into an apply function
-	res_df <- data.frame()
-	for(i in 1:length(sources)) {
-		source <- sources[[i]]
-
-		this_res <- process_one_src(source, indicators, lgas)
-
-		res_df <- rbind(res_df, this_res)
-	}
-	res_df
+	do.call(rbind, llply(sources, function(source) {
+		process_one_src(source, indicators, lgas)
+	}))
 }
 
 
 ########### MAIN #######################
 # should be able to take a command that looks like:
-res2 <- process_one_src(c(type="Water_Baseline", file="~/Code/nmis/nmis/dropbox/facility_csvs/Water_Baseline_PhaseII_all_merged_cleaned_09_19_2011.csv"),
+print("testing with no lga constraint...")
+res <- process_one_src(c(type="Water_Baseline", file="~/Code/nmis/nmis/dropbox/facility_csvs/Water_Baseline_PhaseII_all_merged_cleaned_09_19_2011.csv"),
 		  list("borehole_or_tubewell", "developed_and_treated_spring_and_surface_water", "other_protected", "other_unprotected", "protected_dug_well", "protected", "protected&poorly_maintained", "borehole_or_tubewell&motorized", "borehole_or_tubewell&non_motorized", "borehole_or_tubewell&diesel", "borehole_or_tubewell&electric", "borehole_or_tubewell&solar", "borehole_or_tubewell&motorized&poorly_maintained", "borehole_or_tubewell&non_motorized&poorly_maintained", "borehole_or_tubewell&diesel&poorly_maintained", "borehole_or_tubewell&electric&poorly_maintained", "borehole_or_tubewell&solar&poorly_maintained"))
-print(head(res2))
-res3 <- process_one_src(c(type="Water_Baseline", file="~/Code/nmis/nmis/dropbox/facility_csvs/Water_Baseline_PhaseII_all_merged_cleaned_09_19_2011.csv"),
+print(head(res))
+print("testing with single lga..")
+res2 <- process_one_src(c(type="Water_Baseline", file="~/Code/nmis/nmis/dropbox/facility_csvs/Water_Baseline_PhaseII_all_merged_cleaned_09_19_2011.csv"),
 		  list("borehole_or_tubewell", "developed_and_treated_spring_and_surface_water", "other_protected", "other_unprotected", "protected_dug_well", "protected", "protected&poorly_maintained", "borehole_or_tubewell&motorized", "borehole_or_tubewell&non_motorized", "borehole_or_tubewell&diesel", "borehole_or_tubewell&electric", "borehole_or_tubewell&solar", "borehole_or_tubewell&motorized&poorly_maintained", "borehole_or_tubewell&non_motorized&poorly_maintained", "borehole_or_tubewell&diesel&poorly_maintained", "borehole_or_tubewell&electric&poorly_maintained", "borehole_or_tubewell&solar&poorly_maintained"), lgas=list("ABAJI"))
+print(res2)
+print("testing with two lgas..") #TODO: not working :(
+res3 <- process_one_src(c(type="Water_Baseline", file="~/Code/nmis/nmis/dropbox/facility_csvs/Water_Baseline_PhaseII_all_merged_cleaned_09_19_2011.csv"),
+		  list("borehole_or_tubewell", "developed_and_treated_spring_and_surface_water", "other_protected", "other_unprotected", "protected_dug_well", "protected", "protected&poorly_maintained", "borehole_or_tubewell&motorized", "borehole_or_tubewell&non_motorized", "borehole_or_tubewell&diesel", "borehole_or_tubewell&electric", "borehole_or_tubewell&solar", "borehole_or_tubewell&motorized&poorly_maintained", "borehole_or_tubewell&non_motorized&poorly_maintained", "borehole_or_tubewell&diesel&poorly_maintained", "borehole_or_tubewell&electric&poorly_maintained", "borehole_or_tubewell&solar&poorly_maintained"), lgas=list("ABAJI", "AKKO"))
 print(res3)
